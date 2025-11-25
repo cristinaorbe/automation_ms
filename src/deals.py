@@ -1,12 +1,9 @@
-# src/deals.py (Ahora es el módulo API de Deals)
-
 import requests
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
 import os # Necesario para get_last_month_dates si no se importa de contacts
-from contacts import get_last_month_dates # <--- Importamos la función de fechas
+from contacts import get_last_month_dates # rehutilizamos la función de fechas de contacts.py
 
-# URL base para buscar Deals en la API v3 de HubSpot
 DEALS_API_ENDPOINT = "https://api.hubspot.com/crm/v3/objects/deals/search"
 
 # --- EL "MOTOR" DE BÚSQUEDA BASE PARA DEALS (CORREGIDO) ---
@@ -23,15 +20,12 @@ def _search_deals(access_token, pipeline_id_list, additional_filters=[]):
     
     # 1. Filtros Base: Pipeline, Cerrado-Ganado y Fecha de CIERRE.
     base_filters = [
-        # Filtro 1: Debe estar Cerrado/Ganado (hs_is_closed_won = True)
-        {"propertyName": "hs_is_closed_won", "operator": "EQ", "value": "true"}, 
+        {"propertyName": "hs_is_closed_won", "operator": "EQ", "value": "true"},    #Necesitamos que sea verdadera. 
         
-        # Filtro 2: Deals CERRADOS el mes pasado (closedate)
         {"propertyName": "closedate", "operator": "GTE", "value": start_date_ms},
-        {"propertyName": "closedate", "operator": "LT", "value": end_date_ms},
+        {"propertyName": "closedate", "operator": "LT", "value": end_date_ms},      #Necesitamos info de todo el mes pasado. 
         
-        # Filtro 3: Limitar a los pipelines de interés
-        {"propertyName": "pipeline", "operator": "IN", "values": pipeline_id_list}
+        {"propertyName": "pipeline", "operator": "IN", "values": pipeline_id_list}  #Solo contemplamos determinados pipelines (ValuePartner & Default). Los utilizamos en main.py y los tenemos definidos ahí. 
     ]
     
     # 2. Combinamos todos los filtros
@@ -43,6 +37,7 @@ def _search_deals(access_token, pipeline_id_list, additional_filters=[]):
         "limit": 1 # Solo queremos el conteo total
     }
 
+#para los errores, como hemos hecho en contacts: 
     try:
         response = requests.post(DEALS_API_ENDPOINT, headers=headers, json=payload)
         response.raise_for_status() 
@@ -61,10 +56,7 @@ def _search_deals(access_token, pipeline_id_list, additional_filters=[]):
     except Exception as e:
         print(f"Ocurrió un error inesperado al buscar Deals: {e}")
         return None
-
-# -------------------------------------------------------------------
-# --- FUNCIONES PÚBLICAS PARA SER IMPORTADAS POR MAIN.PY ---
-# -------------------------------------------------------------------
+    
 
 def get_engagements_per_pipeline(access_token, pipeline_map):
     """
@@ -72,9 +64,7 @@ def get_engagements_per_pipeline(access_token, pipeline_map):
     """
     print("\nObteniendo Engagements (Deals) por Pipeline...")
     results = {}
-    
-    # Usamos la lista de IDs de pipelines que ya existe en el mapa
-    
+        
     for label, pipeline_id in pipeline_map.items():
         print(f"  - Buscando Pipeline: {label} (ID: {pipeline_id})")
         

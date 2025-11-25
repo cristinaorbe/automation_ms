@@ -1,5 +1,3 @@
-# src/main.py (El orquestador principal - CORREGIDO)
-
 import os
 import pprint
 import csv
@@ -17,8 +15,7 @@ from deals import (
     get_engagements_breakdown_by_property
 )
 
-# --- FUNCIÓN FINAL DE EXPORTACIÓN ---
-# ... (write_final_report se mantiene igual) ...
+# FUNCIÓN FINAL DE EXPORTACIÓN 
 def write_final_report(data_to_write):
     """
     Crea el reporte CSV con toda la información consolidada en el orden exacto.
@@ -45,11 +42,11 @@ def write_final_report(data_to_write):
     except Exception as e:
         print(f"Error al escribir el archivo CSV: {e}")
 
-# --- FUNCIÓN PRINCIPAL DE EJECUCIÓN ---
+# FUNCIÓN PRINCIPAL DE EJECUCIÓN 
 def main():
     print("Iniciando el script de automatización...")
     
-    # --- A. CONFIGURACIÓN GENERAL ---
+    # A. CONFIGURACIÓN GENERAL 
     root_dir = Path(__file__).parent.parent
     env_path = root_dir / ".env"
     load_dotenv(dotenv_path=env_path)
@@ -86,21 +83,29 @@ def main():
         "Marketing Influencers (manual)": "MANUAL_SKIP", 
     }
     
-    # ... (Mapeo de Deals se mantiene igual) ...
     # 3. Engagements (Deals) Configuración
     PIPELINE_MAP = {"[SP] Sales": "default", "[SP] Value Partners & Wealth": "188587965"}
     PIPELINE_ID_LIST = list(PIPELINE_MAP.values()) 
     
     DEAL_TYPE_PROP_NAME = "dealtype"
     DEAL_TYPE_MAP = {
-        "New": "newbusiness", "New - Multi": "New - Multi", "Repeat": "existingbusiness", "Repeat - Multi": "Repeat - Multi"
+        "New": "newbusiness", 
+        "New - Multi": "New - Multi", 
+        "Repeat": "existingbusiness", 
+        "Repeat - Multi": "Repeat - Multi"
     }
 
     DEAL_SOURCE_PROP_NAME = "deal_source"
     DEAL_SOURCE_MAP_RAW = {
-        "Family & Friends (raw)": "Direct Traffic", "Partnership (raw)": "B2C Referrals", "Ambassador": "Ambassador",
-        "Paid": "Paid", "Organic": "Organic", "Outbound Sales": "Outbound Sales", "App": "App", 
-        "Events": "Events", "Influencers and MKT Ambassadors": "Influencers and MKT Ambassadors",
+        "Family & Friends (raw)": "Direct Traffic", 
+        "Partnership (raw)": "B2C Referrals", 
+        "Ambassador": "Ambassador",
+        "Paid": "Paid", 
+        "Organic": "Organic", 
+        "Outbound Sales": "Outbound Sales", 
+        "App": "App", 
+        "Events": "Events", 
+        "Influencers and MKT Ambassadors": "Influencers and MKT Ambassadors",
         "C2C Referrals (raw)": "C2C Referrals" 
     }
     

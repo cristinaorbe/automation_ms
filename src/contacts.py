@@ -85,7 +85,7 @@ def get_leads_by_country(access_token, countries):
 
         if country in ["Spain", "Ireland", "Indonesia", "Australia"]:
             # Usamos la propiedad multi-checkbox
-            property_name = "investment_destination_country__multiple_checkboxes_" 
+            property_name = "investment_destination_country__multiple_checkboxes_"   #No utilizamos la propiedad que no tiene el "Multiple checkboxes" porque no es completa
             country_filter = {
                 "propertyName": property_name,
                 "operator": "CONTAINS_TOKEN", 
@@ -128,7 +128,7 @@ def get_leads_by_traffic_source(access_token, sources_map):
     property_name = "original_traffic_source_2_0" 
     
     results = {}
-    for label, internal_value in sources_map.items():
+    for label, internal_value in sources_map.items():   #recorre todas las opciones que tiene la propiedad: paid_search, paid_social...
         # Ignoramos si la etiqueta es 'manual'
         if internal_value == "MANUAL_SKIP":
              results[label] = "MANUAL_SKIP"
@@ -165,8 +165,6 @@ def get_leads_ambassadors(access_token, internal_name_code):
 
 # --- BLOQUE DE PRUEBA (SOLO PARA DEPURACIÓN - Se mantiene por completitud) ---
 if __name__ == "__main__":
-    # ... (El bloque de prueba sigue igual, solo se actualiza TEST_MAP_SOURCES)
-    # ...
     # MAPA DE FUENTES CON VALORES FINALES
     TEST_MAP_SOURCES = {
         "Paid Search": "PAID_SEARCH",
