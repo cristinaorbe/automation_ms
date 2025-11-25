@@ -1,49 +1,56 @@
-# src/deals.py
+# src/deals.py (Ahora es el módulo API de Deals)
 
 import requests
-import os
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
-from dotenv import load_dotenv
-from pathlib import Path
+import os # Necesario para get_last_month_dates si no se importa de contacts
+from contacts import get_last_month_dates # <--- Importamos la función de fechas
 
-# URL de la API para DEALS
-API_ENDPOINT = "https://api.hubapi.com/crm/v3/objects/deals/search"
+# URL base para buscar Deals en la API v3 de HubSpot
+DEALS_API_ENDPOINT = "https://api.hubspot.com/crm/v3/objects/deals/search"
 
-# --- FUNCIÓN DE AYUDA PARA FECHAS ---
-def get_last_month_dates():
-    """Calcula las fechas de inicio y fin del mes pasado."""
-    today = datetime.now()
-    first_day_current_month = today.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-    last_day_last_month = first_day_current_month - relativedelta(days=1)
-    first_day_last_month = last_day_last_month.replace(day=1)
-    start_timestamp = int(first_day_last_month.timestamp() * 1000)
-    end_timestamp = int(first_day_current_month.timestamp() * 1000)
-    return start_timestamp, end_timestamp
-
-# --- MOTOR DE BÚSQUEDA GENÉRICO PARA DEALS ---
-def _search_deals(access_token, filters_list):
+# --- EL "MOTOR" DE BÚSQUEDA BASE PARA DEALS (CORREGIDO) ---
+def _search_deals(access_token, pipeline_id_list, additional_filters=[]):
     """
-    Función interna genérica para buscar deals con los filtros que le pasemos.
+    Función interna que busca Deals. 
+    Aplica filtros de pipeline, CERRADO/GANADO y fecha de CIERRE.
     """
     headers = {
         "Authorization": f"Bearer {access_token}",
         "Content-Type": "application/json"
     }
+    start_date_ms, end_date_ms = get_last_month_dates()
+    
+    # 1. Filtros Base: Pipeline, Cerrado-Ganado y Fecha de CIERRE.
+    base_filters = [
+        # Filtro 1: Debe estar Cerrado/Ganado (hs_is_closed_won = True)
+        {"propertyName": "hs_is_closed_won", "operator": "EQ", "value": "true"}, 
+        
+        # Filtro 2: Deals CERRADOS el mes pasado (closedate)
+        {"propertyName": "closedate", "operator": "GTE", "value": start_date_ms},
+        {"propertyName": "closedate", "operator": "LT", "value": end_date_ms},
+        
+        # Filtro 3: Limitar a los pipelines de interés
+        {"propertyName": "pipeline", "operator": "IN", "values": pipeline_id_list}
+    ]
+    
+    # 2. Combinamos todos los filtros
+    all_filters = base_filters + additional_filters
     
     payload = {
-        "filterGroups": [{"filters": filters_list}],
+        "filterGroups": [{"filters": all_filters}],
+        "properties": ["dealname"], 
         "limit": 1 # Solo queremos el conteo total
     }
 
     try:
-        response = requests.post(API_ENDPOINT, headers=headers, json=payload)
+        response = requests.post(DEALS_API_ENDPOINT, headers=headers, json=payload)
         response.raise_for_status() 
         data = response.json()
         return data.get("total", 0)
 
     except requests.exceptions.HTTPError as err:
-        print(f"\n--- ERROR DE API (DEALS) ---")
+        print(f"\n--- ERROR DE API (Deals) ---")
         print(f"Error: {err}")
         try:
             error_data = err.response.json()
@@ -52,66 +59,51 @@ def _search_deals(access_token, filters_list):
             print(f"Detalles (no JSON): {err.response.text}")
         return None
     except Exception as e:
-        print(f"Ocurrió un error inesperado: {e}")
+        print(f"Ocurrió un error inesperado al buscar Deals: {e}")
         return None
 
-# --- FUNCIÓN PÚBLICA PARA ENGAGEMENTS ---
-def get_new_engagements(access_token):
-    """
-    Obtiene el total de 'Engagements' (Deals ganados el mes pasado).
-    """
-    print("\nObteniendo total de 'Engagements' (Deals)...")
-    
-    start_date_ms, end_date_ms = get_last_month_dates()
-    
-    engagement_filters = [
-        {
-            "propertyName": "closedate", # Asumimos que este es correcto
-            "operator": "GTE",
-            "value": start_date_ms
-        },
-        {
-            "propertyName": "closedate",
-            "operator": "LT",
-            "value": end_date_ms
-        },
-        {
-            # ¡CORRECTO! Usamos el "Internal Name" que encontraste
-            "propertyName": "hs_is_closed_won",
-            "operator": "EQ",
-            "value": True # Usamos el booleano True
-        }
-    ]
-    
-    return _search_deals(access_token, engagement_filters)
+# -------------------------------------------------------------------
+# --- FUNCIONES PÚBLICAS PARA SER IMPORTADAS POR MAIN.PY ---
+# -------------------------------------------------------------------
 
-
-# --- BLOQUE DE PRUEBA (SOLO PARA DEPURACIÓN) ---
-if __name__ == "__main__":
+def get_engagements_per_pipeline(access_token, pipeline_map):
     """
-    Esto solo se ejecuta cuando corremos 'python src/deals.py' directamente
+    Obtiene el conteo total de deals para cada pipeline especificado en el mapa.
     """
-    print("--- MODO DE PRUEBA: 'deals.py' ---")
+    print("\nObteniendo Engagements (Deals) por Pipeline...")
+    results = {}
     
-    # 1. Cargar el .env
-    root_dir = Path(__file__).parent.parent
-    env_path = root_dir / ".env"
-    load_dotenv(dotenv_path=env_path)
+    # Usamos la lista de IDs de pipelines que ya existe en el mapa
     
-    # 2. Obtener el Token
-    HUBSPOT_ACCESS_TOKEN = os.getenv("HUBSPOT_ACCESS_TOKEN")
-    
-    if not HUBSPOT_ACCESS_TOKEN:
-        raise ValueError("No se encontró HUBSPOT_ACCESS_TOKEN para la prueba.")
+    for label, pipeline_id in pipeline_map.items():
+        print(f"  - Buscando Pipeline: {label} (ID: {pipeline_id})")
         
-    print("Token cargado. Llamando a la función 'get_new_engagements'...")
+        # Para el conteo por pipeline, solo usamos el ID de ese pipeline para el filtro
+        count = _search_deals(access_token, [pipeline_id], additional_filters=[])
+        results[label] = count
+        
+    return results
+
+def get_engagements_breakdown_by_property(access_token, pipeline_id_list, property_name, property_map):
+    """
+    Obtiene el desglose de deals por una propiedad específica (ej. deal_source o dealtype).
+    """
+    print(f"\nObteniendo desglose de Engagements por propiedad: {property_name}...")
     
-    # 3. Llamar a la función que queremos probar
-    total_engagements = get_new_engagements(HUBSPOT_ACCESS_TOKEN)
+    results = {}
     
-    # 4. Imprimir el resultado
-    if total_engagements is not None:
-        print("\n--- ¡Prueba Exitosa! ---")
-        print(f"Total Engagements: {total_engagements}")
-    else:
-        print("\n--- La prueba falló. Revisa el error de API de arriba. ---")
+    for label, internal_value in property_map.items():
+        print(f"  - Buscando por: {label} (Valor API: {internal_value})")
+        
+        # Filtro para la propiedad y el valor actual
+        property_filter = {
+            "propertyName": property_name,
+            "operator": "EQ", # Asumimos operador de igualdad (EQ)
+            "value": internal_value
+        }
+        
+        # Usamos todos los pipelines definidos en 'pipeline_id_list'
+        count = _search_deals(access_token, pipeline_id_list, additional_filters=[property_filter])
+        results[label] = count
+        
+    return results
