@@ -137,18 +137,17 @@ def get_engagements_per_pipeline(access_token, pipeline_map):
     VALUE_PARTNER_ID = "188587965" # ID del pipeline de Value Partner
     
     for label, pipeline_id in pipeline_map.items():
-        print(f"  - Buscando Pipeline: {label} (ID: {pipeline_id})")
-        
+        # ...
         if pipeline_id == VALUE_PARTNER_ID:
             # Métrica: SUMA DE VALOR
             value = _calculate_total_value(access_token, [pipeline_id], additional_filters=[])
         else:
             # Métrica: CONTEO (Para Sales y cualquier otro pipeline por defecto)
             value = _search_deals(access_token, [pipeline_id], additional_filters=[])
-            
+        
         results[label] = value
         
-    return results
+    return results # {'[SP] Sales': CONTEO, '[SP] Value Partners & Wealth': SUMA_DE_VALOR}
 
 def get_engagements_breakdown_by_property(access_token, pipeline_id_list, property_name, property_map):
     """

@@ -2,40 +2,40 @@ MÉTRICA,VALOR
 --- 2LEADS - SPLIT PER CHANNEL ---,
 # of new leads,3726
 Target,Manual
-Paid online Marketing,2614
+Paid online Marketing,2615
 Meta - Paid Social,1754
-Google - Paid Search,860
-C2C referrals,0
+Google - Paid Search,861
+C2C referrals,Manual
 Family & friends,0
-PR /Events / Organic,12
-Marketing Influencers,0
+PR /Events / Organic,982
+Marketing Influencers,Manual
 Partnerships,0
 App,0
 Ambassadors,0
 Outbound,0
 B2C referrals,0
 Indonesia,459
-Ireland,181
+Ireland,182
 Wealth,0
 ,
 --- 5ENGAGEMENTS - SPLIT PER CHANNEL ---,
-# of new Engagements,148
-Deal Source (Closers + PC + Wealth),148
-Paid Online Marketing,75
-Meta,75
-Google,0
-C2C,0
-Family and Friends,10
-PR / Events / Organic,26
+# of new Engagements (Sales CONTEO),224.0
+Deal Source (Closers + PC),141
+Value Partner (SUMA DE VALOR),83.0
+Paid Online Marketing,74
+Meta,21
+Google,53
+C2C,12
+Family and Friends,11
+PR / Events / Organic,27
 Marketing Influencers,0
 Partnerships,0
 App,3
 Ambassador,21
 Outbound Sales,0
-B2B Referrals,0
 ,
 --- 6Deal Type ---,
-New,116
+New,119
 New Multi,7
 Repeat,11
 Repeat Multi,13

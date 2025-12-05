@@ -29,8 +29,8 @@ def get_count(data, key):
         return 0
     
     try:
-        # Intentamos convertir a int (útil para conteos)
-        return int(value)
+        # Intentamos convertir a int (útil para conteos) o float (útil para sumas de valor)
+        return float(value) if isinstance(value, (float, str)) and '.' in str(value) else int(value)
     except (ValueError, TypeError):
         # Si no es un número (int o float), lo devolvemos tal cual o 0.
         return value if isinstance(value, (int, float)) else 0
@@ -118,8 +118,16 @@ def main():
     pipeline_totals = get_engagements_per_pipeline(HUBSPOT_ACCESS_TOKEN, PIPELINE_MAP)
     
     # Obtenemos los valores individuales de la lista
-    total_engagements_count = pipeline_totals.get("[SP] Sales", 0) # CONTEO
-    value_partner_sum = pipeline_totals.get("[SP] Value Partners & Wealth", 0) # SUMA DE VALOR
+    sales_count = get_count(pipeline_totals, "[SP] Sales") # CONTEO
+    value_partner_sum = get_count(pipeline_totals, "[SP] Value Partners & Wealth") # SUMA DE VALOR
+    
+    # **INICIO DE CAMBIO DE LÓGICA DE CÁLCULO**
+    # Calculamos el total de Engagements según la nueva lógica (CONTEO de Sales + SUMA DE VALOR de VP)
+    # NOTA: Esto suma unidades (Sales) con valor (Value Partner). Se realiza por requisito explícito.
+    total_engagements_for_report = sales_count + value_partner_sum 
+    # El conteo de Sales se usa como el primer desglose.
+    total_engagements_count = sales_count 
+    # **FIN DE CAMBIO DE LÓGICA DE CÁLCULO**
     
     deal_source_raw = get_engagements_breakdown_by_property(HUBSPOT_ACCESS_TOKEN, PIPELINE_ID_LIST, DEAL_SOURCE_PROP_NAME, DEAL_SOURCE_MAP_RAW)
     deal_type_data = get_engagements_breakdown_by_property(HUBSPOT_ACCESS_TOKEN, PIPELINE_ID_LIST, DEAL_TYPE_PROP_NAME, DEAL_TYPE_MAP)
@@ -166,8 +174,8 @@ def main():
         # --- 2. SECCIÓN ENGAGEMENTS ---
         ("", ""), 
         ("--- 5ENGAGEMENTS - SPLIT PER CHANNEL ---", ""),
-        ("# of new Engagements (Sales CONTEO)", total_engagements_count), # CONTEO de Sales
-        ("Deal Source (Closers + PC + Wealth)", total_engagements_count), # Usamos CONTEO de Sales
+        ("# of new Engagements (Sales CONTEO)", total_engagements_for_report), 
+        ("Deal Source (Closers + PC)", total_engagements_count), 
         ("Value Partner (SUMA DE VALOR)", value_partner_sum), # SUMA DE VALOR de Value Partner
         ("Paid Online Marketing", paid_online_mkt_deals), 
         ("Meta", meta_deals), 
@@ -180,7 +188,7 @@ def main():
         ("App", get_count(deal_source_raw, "App")),
         ("Ambassador", get_count(deal_source_raw, "Ambassador")),
         ("Outbound Sales", get_count(deal_source_raw, "Outbound Sales")),
-        ("B2B Referrals", get_count(deal_source_raw, "Partnership (raw)")), 
+        # **LÍNEA ELIMINADA: Se quita la referencia a B2B Referrals / Partnership (raw)**
         
         # --- 3. SECCIÓN DEAL TYPE ---
         ("", ""), 
