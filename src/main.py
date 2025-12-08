@@ -1,7 +1,6 @@
-# src/main.py (El orquestador principal - FLUJO CORREGIDO Y FINAL)
+# src/main.py (El orquestador principal - VERSIÓN MENSUALIZADA)
 
 import os
-import pprint
 import csv
 from datetime import datetime
 from dotenv import load_dotenv
@@ -10,14 +9,15 @@ from contacts import (
     get_total_new_leads, 
     get_leads_by_country, 
     get_leads_by_traffic_source,
-    get_last_month_dates 
+    get_leads_ambassadors, # Aseguramos que esta se use
+    get_month_ranges_2025 # <-- IMPORTACIÓN CLAVE PARA LA ITERACIÓN
 )
 from deals import ( 
     get_engagements_per_pipeline,
     get_engagements_breakdown_by_property
 )
 
-# --- FUNCIÓN DE AYUDA PARA OBTENER EL CONTEO/VALOR (ARREGLO DEL ERROR) ---
+# --- FUNCIÓN DE AYUDA PARA OBTENER EL CONTEO/VALOR ---
 def get_count(data, key):
     """
     Función de ayuda para obtener el conteo/valor. 
@@ -29,37 +29,75 @@ def get_count(data, key):
         return 0
     
     try:
-        # Intentamos convertir a int (útil para conteos) o float (útil para sumas de valor)
+        # Intentamos convertir a int o float
         return float(value) if isinstance(value, (float, str)) and '.' in str(value) else int(value)
     except (ValueError, TypeError):
-        # Si no es un número (int o float), lo devolvemos tal cual o 0.
-        return value if isinstance(value, (int, float)) else 0
+        # Devuelve 0 si no es un número válido (evitando problemas de CSV)
+        return 0
 
 
-# --- FUNCIÓN FINAL DE EXPORTACIÓN ---
-def write_final_report(data_to_write):
+# --- FUNCIÓN FINAL DE EXPORTACIÓN (MODIFICADA para formato mensualizado) ---
+def write_final_report(monthly_data):
     """
-    Crea el reporte CSV con toda la información consolidada en el orden exacto.
+    Crea el reporte CSV con toda la información consolidada en formato mensualizado.
+    monthly_data: {'Ene-25': [(label, value), ...], 'Feb-25': [...]}
     """
     today_str = datetime.now().strftime("%Y-%m-%d")
-    filename = f"reporte_mensual_{today_str}.csv"
+    filename = f"reporte_mensualizado_{today_str}.csv"
     
     print(f"\nEscribiendo reporte final en: {filename}")
     
+    if not monthly_data:
+        print("No hay datos para generar el reporte.")
+        return
+
+    # Extraer los encabezados de mes y las etiquetas de las métricas
+    month_labels = list(monthly_data.keys())
+    # Usamos el primer mes para obtener el orden de las métricas
+    metric_labels_and_values = monthly_data[month_labels[0]]
+    
+    # 1. Construir las filas de encabezado (Fila 1, Fila 3, Meses)
+    report_rows = []
+    
+    # Fila 1: Título principal
+    report_rows.append(["MARKETING & SALES DASHBOARD (US$, Global)"] + [""] * len(month_labels))
+    # Fila 2: Vacía para espaciar
+    report_rows.append([""] * (len(month_labels) + 1))
+    # Fila 3: Moneda y Encabezados de mes
+    report_rows.append(["In US$, unless otherwise stated"] + month_labels)
+    
+    # 2. Construir las filas de Métricas
+    for metric_label, _ in metric_labels_and_values:
+        row = [metric_label]
+        is_title_row = metric_label.startswith("---")
+        
+        # Iterar sobre cada mes para obtener el valor correspondiente
+        for month_label in month_labels:
+            # Obtener el valor de la métrica específica para este mes
+            month_metrics = dict(monthly_data[month_label])
+            value = month_metrics.get(metric_label, '')
+            
+            # Formateo si es una suma de valor para Deals
+            if metric_label == "Value Partner (SUMA DE VALOR)" and isinstance(value, (int, float)):
+                row.append(f"{value:.2f}")
+            elif is_title_row:
+                 row.append("")
+            else:
+                row.append(value)
+                
+        report_rows.append(row)
+
     try:
         with open(filename, mode='w', newline='', encoding='utf-8') as file:
             writer = csv.writer(file)
-            writer.writerow(["MÉTRICA", "VALOR"])
-            for label, value in data_to_write:
-                writer.writerow([label, value])
+            writer.writerows(report_rows)
             
         print(f"¡Éxito! Reporte guardado en {filename}")
-        print(f"Ruta completa: {Path.cwd() / filename}")
 
     except Exception as e:
         print(f"Error al escribir el archivo CSV: {e}")
 
-# --- FUNCIÓN PRINCIPAL DE EJECUCIÓN ---
+# --- FUNCIÓN PRINCIPAL DE EJECUCIÓN (MODIFICADA para la iteración mensual) ---
 def main():
     print("Iniciando el script de automatización...")
     
@@ -105,102 +143,106 @@ def main():
     TRAFFIC_SOURCE_MAP = {
         "Meta": "PAID_SOCIAL", "Google": "PAID_SEARCH",
     }
-    
-    # C. EJECUCIÓN DE LLAMADAS A LA API 
-    print("\nEjecutando llamadas a la API...")
-    
-    # CONTACTS
-    total_leads = get_total_new_leads(HUBSPOT_ACCESS_TOKEN)
-    country_leads = get_leads_by_country(HUBSPOT_ACCESS_TOKEN, COUNTRIES_TO_CHECK)
-    lead_sources_raw = get_leads_by_traffic_source(HUBSPOT_ACCESS_TOKEN, LEAD_SOURCES_MAP)
-    
-    # DEALS (Obtiene CONTEO para Sales y SUMA DE VALOR para Value Partner)
-    pipeline_totals = get_engagements_per_pipeline(HUBSPOT_ACCESS_TOKEN, PIPELINE_MAP)
-    
-    # Obtenemos los valores individuales de la lista
-    sales_count = get_count(pipeline_totals, "[SP] Sales") # CONTEO
-    value_partner_sum = get_count(pipeline_totals, "[SP] Value Partners & Wealth") # SUMA DE VALOR
-    
-    # **INICIO DE CAMBIO DE LÓGICA DE CÁLCULO**
-    # Calculamos el total de Engagements según la nueva lógica (CONTEO de Sales + SUMA DE VALOR de VP)
-    # NOTA: Esto suma unidades (Sales) con valor (Value Partner). Se realiza por requisito explícito.
-    total_engagements_for_report = sales_count + value_partner_sum 
-    # El conteo de Sales se usa como el primer desglose.
-    total_engagements_count = sales_count 
-    # **FIN DE CAMBIO DE LÓGICA DE CÁLCULO**
-    
-    deal_source_raw = get_engagements_breakdown_by_property(HUBSPOT_ACCESS_TOKEN, PIPELINE_ID_LIST, DEAL_SOURCE_PROP_NAME, DEAL_SOURCE_MAP_RAW)
-    deal_type_data = get_engagements_breakdown_by_property(HUBSPOT_ACCESS_TOKEN, PIPELINE_ID_LIST, DEAL_TYPE_PROP_NAME, DEAL_TYPE_MAP)
-    traffic_source_deals = get_engagements_breakdown_by_property(HUBSPOT_ACCESS_TOKEN, PIPELINE_ID_LIST, TRAFFIC_SOURCE_PROP_NAME, TRAFFIC_SOURCE_MAP)
 
-    # D. PROCESAMIENTO Y AGRUPACIÓN DE RESULTADOS
-    print("\nProcesando y agrupando resultados finales...")
-
-    # 1. AGRUPACIÓN DE FUENTES DE LEADS (CONTACTOS - CONTEOS)
-    paid_online_mkt_leads = get_count(lead_sources_raw, "Meta - Paid Social") + get_count(lead_sources_raw, "Google - Paid Search")
-    pr_events_organic_leads = get_count(lead_sources_raw, "PR/Events/Organic (raw)")
-    c2c_referrals_leads = "Manual" 
-    marketing_influencers_leads = "Manual" 
-
-    # 2. AGRUPACIÓN DE FUENTES DE ENGAGEMENTS (DEALS - CONTEOS)
-    # Ya que el desglose de propiedades usa CONTEO, esta agrupación se mantiene igual.
-    meta_deals = get_count(traffic_source_deals, "Meta")
-    google_deals = get_count(traffic_source_deals, "Google")
-    paid_online_mkt_deals = meta_deals + google_deals 
-    pr_events_organic_deals = get_count(deal_source_raw, "Organic") + get_count(deal_source_raw, "Events")
+    # C. ITERACIÓN POR MES Y EJECUCIÓN DE LLAMADAS A LA API 
+    monthly_report_data = {}
+    month_ranges = get_month_ranges_2025() 
     
-    # E. CONSTRUCCIÓN DEL REPORTE ORDENADO 
-    final_report_data = [
-        # --- 1. SECCIÓN LEADS ---
-        ("--- 2LEADS - SPLIT PER CHANNEL ---", ""),
-        ("# of new leads", total_leads),
-        ("Target", "Manual"), 
-        ("Paid online Marketing", paid_online_mkt_leads),
-        ("Meta - Paid Social", get_count(lead_sources_raw, "Meta - Paid Social")),
-        ("Google - Paid Search", get_count(lead_sources_raw, "Google - Paid Search")),
-        ("C2C referrals", c2c_referrals_leads), 
-        ("Family & friends", get_count(lead_sources_raw, "Family & friends")),
-        ("PR /Events / Organic", pr_events_organic_leads),
-        ("Marketing Influencers", marketing_influencers_leads), 
-        ("Partnerships", get_count(lead_sources_raw, "Partnerships")),
-        ("App", get_count(lead_sources_raw, "App")),
-        ("Ambassadors", get_count(lead_sources_raw, "Ambassadors")),
-        ("Outbound", get_count(lead_sources_raw, "Outbound")),
-        ("B2C referrals", get_count(lead_sources_raw, "B2C referrals")),
-        ("Indonesia", get_count(country_leads, "Indonesia")),
-        ("Ireland", get_count(country_leads, "Ireland")),
-        ("Wealth", get_count(country_leads, "Wealth")), 
+    if not month_ranges:
+        print("No hay meses completos de 2025 para reportar. Terminando ejecución.")
+        return
+
+    print(f"\nEjecutando llamadas a la API para {len(month_ranges)} meses...")
+
+    for month_label, (start_date_ms, end_date_ms) in month_ranges.items():
+        print(f"-> Procesando **{month_label}** (Fechas: {datetime.fromtimestamp(start_date_ms/1000).strftime('%Y-%m-%d')} a {datetime.fromtimestamp(end_date_ms/1000).strftime('%Y-%m-%d')})")
         
-        # --- 2. SECCIÓN ENGAGEMENTS ---
-        ("", ""), 
-        ("--- 5ENGAGEMENTS - SPLIT PER CHANNEL ---", ""),
-        ("# of new Engagements (Sales CONTEO)", total_engagements_for_report), 
-        ("Deal Source (Closers + PC)", total_engagements_count), 
-        ("Value Partner (SUMA DE VALOR)", value_partner_sum), # SUMA DE VALOR de Value Partner
-        ("Paid Online Marketing", paid_online_mkt_deals), 
-        ("Meta", meta_deals), 
-        ("Google", google_deals), 
-        ("C2C", get_count(deal_source_raw, "C2C Referrals (raw)")), 
-        ("Family and Friends", get_count(deal_source_raw, "Family & Friends (raw)")),
-        ("PR / Events / Organic", pr_events_organic_deals), 
-        ("Marketing Influencers", get_count(deal_source_raw, "Influencers and MKT Ambassadors")), 
-        ("Partnerships", get_count(deal_source_raw, "Partnership (raw)")),
-        ("App", get_count(deal_source_raw, "App")),
-        ("Ambassador", get_count(deal_source_raw, "Ambassador")),
-        ("Outbound Sales", get_count(deal_source_raw, "Outbound Sales")),
-        # **LÍNEA ELIMINADA: Se quita la referencia a B2B Referrals / Partnership (raw)**
-        
-        # --- 3. SECCIÓN DEAL TYPE ---
-        ("", ""), 
-        ("--- 6Deal Type ---", ""),
-        ("New", get_count(deal_type_data, "New")),
-        ("New Multi", get_count(deal_type_data, "New - Multi")),
-        ("Repeat", get_count(deal_type_data, "Repeat")),
-        ("Repeat Multi", get_count(deal_type_data, "Repeat - Multi")),
-    ]
+        # 1. CONTACTS (Todas las funciones usan start_date_ms y end_date_ms)
+        total_leads = get_total_new_leads(HUBSPOT_ACCESS_TOKEN, start_date_ms, end_date_ms)
+        country_leads = get_leads_by_country(HUBSPOT_ACCESS_TOKEN, start_date_ms, end_date_ms, COUNTRIES_TO_CHECK)
+        lead_sources_raw = get_leads_by_traffic_source(HUBSPOT_ACCESS_TOKEN, start_date_ms, end_date_ms, LEAD_SOURCES_MAP)
+        ambassador_leads = get_leads_ambassadors(HUBSPOT_ACCESS_TOKEN, start_date_ms, end_date_ms, "promotional_code")
 
-    # F. EXPORTACIÓN FINAL 
-    write_final_report(final_report_data)
+        # 2. DEALS (Todas las funciones usan start_date_ms y end_date_ms)
+        pipeline_totals = get_engagements_per_pipeline(HUBSPOT_ACCESS_TOKEN, start_date_ms, end_date_ms, PIPELINE_MAP)
+        
+        # Obtenemos los valores individuales de la lista
+        sales_count = get_count(pipeline_totals, "[SP] Sales")
+        value_partner_sum = get_count(pipeline_totals, "[SP] Value Partners & Wealth")
+        
+        # Cálculos de Engagements
+        total_engagements_for_report = sales_count + value_partner_sum # CONTEO + SUMA DE VALOR VP
+        total_engagements_count = sales_count 
+        
+        deal_source_raw = get_engagements_breakdown_by_property(HUBSPOT_ACCESS_TOKEN, PIPELINE_ID_LIST, start_date_ms, end_date_ms, DEAL_SOURCE_PROP_NAME, DEAL_SOURCE_MAP_RAW)
+        deal_type_data = get_engagements_breakdown_by_property(HUBSPOT_ACCESS_TOKEN, PIPELINE_ID_LIST, start_date_ms, end_date_ms, DEAL_TYPE_PROP_NAME, DEAL_TYPE_MAP)
+        traffic_source_deals = get_engagements_breakdown_by_property(HUBSPOT_ACCESS_TOKEN, PIPELINE_ID_LIST, start_date_ms, end_date_ms, TRAFFIC_SOURCE_PROP_NAME, TRAFFIC_SOURCE_MAP)
+
+        # D. PROCESAMIENTO Y AGRUPACIÓN DE RESULTADOS
+        paid_online_mkt_leads = get_count(lead_sources_raw, "Meta - Paid Social") + get_count(lead_sources_raw, "Google - Paid Search")
+        pr_events_organic_leads = get_count(lead_sources_raw, "PR/Events/Organic (raw)")
+        c2c_referrals_leads = "Manual" 
+        marketing_influencers_leads = "Manual" 
+        
+        meta_deals = get_count(traffic_source_deals, "Meta")
+        google_deals = get_count(traffic_source_deals, "Google")
+        paid_online_mkt_deals = meta_deals + google_deals 
+        pr_events_organic_deals = get_count(deal_source_raw, "Organic") + get_count(deal_source_raw, "Events")
+        
+        # E. CONSTRUCCIÓN DEL REPORTE ORDENADO PARA EL MES ACTUAL
+        final_report_data_month = [
+            # --- 1. SECCIÓN LEADS ---
+            ("--- 2LEADS - SPLIT PER CHANNEL ---", ""),
+            ("# of new leads", total_leads),
+            ("Target", "Manual"), 
+            ("Paid online Marketing", paid_online_mkt_leads),
+            ("Meta - Paid Social", get_count(lead_sources_raw, "Meta - Paid Social")),
+            ("Google - Paid Search", get_count(lead_sources_raw, "Google - Paid Search")),
+            ("C2C referrals", c2c_referrals_leads), 
+            ("Family & friends", get_count(lead_sources_raw, "Family & friends")),
+            ("PR /Events / Organic", pr_events_organic_leads),
+            ("Marketing Influencers", marketing_influencers_leads), 
+            ("Partnerships", get_count(lead_sources_raw, "Partnerships")),
+            ("App", get_count(lead_sources_raw, "App")),
+            ("Ambassadors", ambassador_leads),
+            ("Outbound", get_count(lead_sources_raw, "Outbound")),
+            ("B2C referrals", get_count(lead_sources_raw, "B2C referrals")),
+            ("Indonesia", get_count(country_leads, "Indonesia")),
+            ("Ireland", get_count(country_leads, "Ireland")),
+            ("Wealth", get_count(country_leads, "Wealth")), 
+            
+            # --- 2. SECCIÓN ENGAGEMENTS ---
+            ("", ""), 
+            ("--- 5ENGAGEMENTS - SPLIT PER CHANNEL ---", ""),
+            ("# of new Engagements (Sales CONTEO)", total_engagements_for_report), 
+            ("Deal Source (Closers + PC)", total_engagements_count), 
+            ("Value Partner (SUMA DE VALOR)", value_partner_sum), 
+            ("Paid Online Marketing", paid_online_mkt_deals), 
+            ("Meta", meta_deals), 
+            ("Google", google_deals), 
+            ("C2C", get_count(deal_source_raw, "C2C Referrals (raw)")), 
+            ("Family and Friends", get_count(deal_source_raw, "Family & Friends (raw)")),
+            ("PR / Events / Organic", pr_events_organic_deals), 
+            ("Marketing Influencers", get_count(deal_source_raw, "Influencers and MKT Ambassadors")), 
+            ("Partnerships", get_count(deal_source_raw, "Partnership (raw)")),
+            ("App", get_count(deal_source_raw, "App")),
+            ("Ambassador", get_count(deal_source_raw, "Ambassador")),
+            ("Outbound Sales", get_count(deal_source_raw, "Outbound Sales")),
+            
+            # --- 3. SECCIÓN DEAL TYPE ---
+            ("", ""), 
+            ("--- 6Deal Type ---", ""),
+            ("New", get_count(deal_type_data, "New")),
+            ("New Multi", get_count(deal_type_data, "New - Multi")),
+            ("Repeat", get_count(deal_type_data, "Repeat")),
+            ("Repeat Multi", get_count(deal_type_data, "Repeat - Multi")),
+        ]
+
+        # F. Almacenar los datos del mes en el diccionario principal
+        monthly_report_data[month_label] = final_report_data_month
+
+    # G. EXPORTACIÓN FINAL 
+    write_final_report(monthly_report_data)
 
 if __name__ == "__main__":
     main()
